@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Premium CPU Scheduling Visualizer & Compare Tool</title>
+  <link rel="stylesheet" href="style.css">
+  <!-- Axios for API calls -->
+  <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+  <div class="container animate-fade-in">
+    <!-- Header -->
+    <header>
+      <div class="logo-section">
+        <h1>⚡ Antigravity CPU Scheduler</h1>
+        <p>Real-time simulation, Gantt visualization, and algorithm comparisons</p>
+      </div>
+      <div class="server-badge">
+        <div id="connection-status" class="status-dot"></div>
+        <span id="connection-text">Offline Mode (Local Engine)</span>
+      </div>
+    </header>
+
+    <!-- Grid Container -->
+    <div class="dashboard-grid">
+      
+      <!-- LEFT SIDEBAR: Controls & Inputs -->
+      <aside class="panel">
+        <div>
+          <h2 class="panel-title">1. Add Process <span>Inputs</span></h2>
+        </div>
+        
+        <form id="process-form" onsubmit="event.preventDefault(); addProcess();">
+          <div class="input-row-three">
+            <div class="form-group">
+              <label for="proc-id">PID</label>
+              <input type="text" id="proc-id" placeholder="P1" required autocomplete="off">
+            </div>
+            <div class="form-group">
+              <label for="arrival-time">Arrival Time</label>
+              <input type="number" id="arrival-time" min="0" value="0" required>
+            </div>
+            <div class="form-group">
+              <label for="burst-time">Burst Time</label>
+              <input type="number" id="burst-time" min="1" value="5" required>
+            </div>
+          </div>
+
+          <div class="form-group" style="margin-top: 1rem;">
+            <label for="priority">Priority (Optional for FCFS/SJF)</label>
+            <input type="number" id="priority" min="0" value="1">
+          </div>
+
+          <button type="submit" class="btn btn-primary" style="margin-top: 1.2rem; width: 100%;">
+            ➕ Add Process
+          </button>
+        </form>
+
+        <div class="button-row">
+          <button class="btn" onclick="generateRandomProcesses()">🎲 Randomize</button>
+          <button class="btn btn-outline-danger" onclick="clearProcesses()">🗑️ Clear All</button>
+        </div>
+
+        <div class="form-group">
+          <label>Load Presets</label>
+          <div class="presets-grid">
+            <button class="btn btn-sm" onclick="loadPreset('convoy')">Convoy Effect</button>
+            <button class="btn btn-sm" onclick="loadPreset('standard')">Standard Set</button>
+            <button class="btn btn-sm" onclick="loadPreset('priority')">Priority Mix</button>
+            <button class="btn btn-sm" onclick="loadPreset('sjf-test')">SJF/SRTF Edge</button>
+          </div>
+        </div>
+
+        <div class="process-list-container">
+          <label style="margin-bottom: 0.5rem; display: block;">Active Process Pool</label>
+          <div id="process-list-empty" class="process-list-empty">No processes added yet. Add processes or load a preset.</div>
+          <div id="process-pool"></div>
+        </div>
+      </aside>
+
+      <!-- RIGHT PANEL: Algorithms, Visualizer & Results -->
+      <main style="display: flex; flex-direction: column; gap: 2rem;">
+        
+        <!-- Algorithm Configuration -->
+        <section class="panel">
+          <h2 class="panel-title">2. Choose Algorithm & Settings <span>Configuration</span></h2>
+          
+          <div class="input-row">
+            <div class="form-group">
+              <label for="algorithm-select">CPU Scheduling Algorithm</label>
+              <select id="algorithm-select" onchange="toggleAlgorithmControls()">
+                <option value="fcfs">First Come First Serve (FCFS)</option>
+                <option value="sjf">Shortest Job First (SJF)</option>
+                <option value="priority">Priority Scheduling</option>
+                <option value="rr">Round Robin (RR)</option>
+              </select>
+            </div>
+            
+            <div class="form-group" id="rr-quantum-group" style="display: none;">
+              <label for="quantum-range">Time Quantum (<span id="quantum-value">2</span>)</label>
+              <input type="range" id="quantum-range" min="1" max="20" value="2" oninput="updateQuantumValue(this.value)">
+            </div>
+
+            <div class="form-group" id="preemptive-group" style="display: none; justify-content: center;">
+              <div class="toggle-container">
+                <label for="preemptive-toggle" style="cursor: pointer;">Preemptive Mode</label>
+                <label class="switch">
+                  <input type="checkbox" id="preemptive-toggle" onchange="runScheduler()">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="input-row" id="priority-order-group" style="display: none;">
+            <div class="form-group" style="grid-column: 1 / -1;">
+              <div class="toggle-container">
+                <label for="priority-order-toggle" style="cursor: pointer;">Higher value represents higher priority</label>
+                <label class="switch">
+                  <input type="checkbox" id="priority-order-toggle" onchange="runScheduler()">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Visualization Output (Gantt) -->
+        <section class="panel animate-fade-in" id="visualizer-panel" style="display: none;">
+          <h2 class="panel-title">3. Gantt Chart <span>Timeline</span></h2>
+          
+          <div class="gantt-container-outer">
+            <div id="gantt-chart" class="gantt-chart"></div>
+            <div id="gantt-axis" class="gantt-chart-axis-label"></div>
+          </div>
+        </section>
+
+        <!-- Results Table -->
+        <section class="panel animate-fade-in" id="results-panel" style="display: none;">
+          <h2 class="panel-title">4. Calculations Table <span>Details</span></h2>
+          
+          <div class="metrics-row">
+            <div class="metric-card waiting">
+              <div class="metric-label">Avg Waiting Time</div>
+              <div class="metric-value"><span id="avg-waiting">0</span><span class="metric-unit"> ms</span></div>
+            </div>
+            <div class="metric-card turnaround">
+              <div class="metric-label">Avg Turnaround Time</div>
+              <div class="metric-value"><span id="avg-turnaround">0</span><span class="metric-unit"> ms</span></div>
+            </div>
+            <div class="metric-card utilization">
+              <div class="metric-label">CPU Utilization</div>
+              <div class="metric-value"><span id="cpu-util">100</span><span class="metric-unit">%</span></div>
+            </div>
+          </div>
+
+          <div class="table-container">
+            <table>
+              <thead>
+                <tr>
+                  <th>Process</th>
+                  <th>Arrival Time</th>
+                  <th>Burst Time</th>
+                  <th>Priority</th>
+                  <th>Completion Time</th>
+                  <th>Turnaround Time</th>
+                  <th>Waiting Time</th>
+                  <th>Response Time</th>
+                </tr>
+              </thead>
+              <tbody id="results-table-body">
+                <!-- Injected via JavaScript -->
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <!-- Algorithm Comparison Section -->
+        <section class="panel animate-fade-in" id="comparison-panel" style="display: none;">
+          <h2 class="panel-title">📊 Multi-Algorithm Performance <span>Comparison</span></h2>
+          <div class="comparison-grid" id="comparison-grid">
+            <!-- Populated via Javascript -->
+          </div>
+        </section>
+
+      </main>
+
+    </div>
+  </div>
+
+  <script src="frontend.js"></script>
+</body>
+</html>
